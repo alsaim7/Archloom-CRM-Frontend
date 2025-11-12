@@ -10,22 +10,29 @@ import {
     Box,
     Button,
 } from "@mui/material";
-import axios from "axios";
-import FilterForm from "../components/filter/FilterForm";
-import FilterTable from "../components/filter/FilterTable";
 import HomeIcon from "@mui/icons-material/Home";
 import { useNavigate } from "react-router-dom";
 
-import {FilterPrint} from "../components/print/FilterPrint"
-import {api} from "../components/utils/api"
+import FilterForm from "../components/filter/FilterForm";
+import FilterTable from "../components/filter/FilterTable";
+import { FilterPrint } from "../components/print/FilterPrint";
+import { api } from "../components/utils/api";
+import useCurrentUser from "../hooks/useCurrentUser"; // ✅ added import
 
 const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
 export default function Filter() {
     const [tableData, setTableData] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
+    const [toast, setToast] = useState({
+        open: false,
+        message: "",
+        severity: "success",
+    });
     const navigate = useNavigate();
+
+    // ✅ Fetch current user info
+    const { user: currentUser, loading: userLoading, error } = useCurrentUser(backendUrl);
 
     const showToast = (message, severity = "success") => {
         setToast({ open: true, message, severity });
@@ -35,23 +42,27 @@ export default function Filter() {
         setToast((prev) => ({ ...prev, open: false }));
     };
 
-    const handleSearch = async ({ date_from, date_to, status }) => {
+    // ✅ Wait for user data to load before rendering
+    if (userLoading) {
+        return (
+            <Backdrop open sx={{ color: "#fff", zIndex: 9999 }}>
+                <CircularProgress color="inherit" />
+            </Backdrop>
+        );
+    }
+
+    // ✅ Handle search/filter action
+    const handleSearch = async ({ date_from, date_to, status, assigned_to_name }) => {
         try {
             setLoading(true);
 
-            // Check if all filters are empty
-            if (!date_from && !date_to && !status) {
-                showToast("Only the latest 100 customers' data is fetched", "info");
-            }
-
-            // Build query params only for provided values
             const paramsObj = {};
             if (date_from) paramsObj.date_from = date_from;
             if (date_to) paramsObj.date_to = date_to;
             if (status) paramsObj.status = status;
+            if (assigned_to_name) paramsObj.assigned_to_name = assigned_to_name;
 
             const query = new URLSearchParams(paramsObj).toString();
-
             const res = await api.get(`${backendUrl}/customers/filter?${query}`);
 
             setTableData(Array.isArray(res.data) ? res.data : []);
@@ -59,14 +70,17 @@ export default function Filter() {
                 showToast("No customers found for given filters", "info");
             }
         } catch (err) {
-            showToast(err?.response?.data?.detail || "Failed to filter customers", "error");
+            showToast(
+                err?.response?.data?.detail || "Failed to filter customers",
+                "error"
+            );
             setTableData([]);
         } finally {
             setLoading(false);
         }
     };
 
-
+    // ✅ Print data
     const handlePrint = () => {
         const result = FilterPrint(tableData, true);
         if (result?.noData) {
@@ -74,7 +88,7 @@ export default function Filter() {
         }
     };
 
-
+    // ✅ Navigation
     const handleGoHome = () => navigate("/");
 
     return (
@@ -86,11 +100,6 @@ export default function Filter() {
                 borderRadius: 3,
                 boxShadow: "0 6px 16px rgba(0, 0, 0, 0.1)",
                 bgcolor: "#f8fafc",
-                // animation: "fadeIn 0.5s ease-in",
-                // "@keyframes fadeIn": {
-                //     from: { opacity: 0, transform: "translateY(10px)" },
-                //     to: { opacity: 1, transform: "translateY(0)" },
-                // },
             }}
         >
             <CardContent sx={{ p: 4 }}>
@@ -119,7 +128,11 @@ export default function Filter() {
 
                 <Backdrop
                     open={loading}
-                    sx={{ color: "#fff", zIndex: 9999, bgcolor: "rgba(0, 0, 0, 0.5)" }}
+                    sx={{
+                        color: "#fff",
+                        zIndex: 9999,
+                        bgcolor: "rgba(0, 0, 0, 0.5)",
+                    }}
                 >
                     <CircularProgress color="inherit" />
                 </Backdrop>
@@ -132,10 +145,11 @@ export default function Filter() {
                     Filter Data
                 </Typography>
 
-                <FilterForm onSearch={handleSearch} />
+                {/* ✅ Pass currentUser so the form knows if user is admin */}
+                <FilterForm onSearch={handleSearch} currentUser={currentUser} />
+
                 <FilterTable data={tableData} />
 
-            
                 <Box sx={{ mt: 3, display: "flex", justifyContent: "flex-end" }}>
                     <Button
                         variant="contained"
@@ -158,11 +172,9 @@ export default function Filter() {
                         Print
                     </Button>
                 </Box>
-
-
-
             </CardContent>
 
+            {/* ✅ Snackbar */}
             <Snackbar
                 open={toast.open}
                 autoHideDuration={4000}

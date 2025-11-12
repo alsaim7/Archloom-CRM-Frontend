@@ -261,19 +261,62 @@ export default function Customers() {
                                 </Box>
 
                                 {/* 8. Note (Full-width, Priority 8) */}
-                                <Box>
-                                    <Typography fontWeight="bold" sx={{ fontSize: { xs: "0.875rem", sm: "1rem" } }}>
-                                        Remarks / Notes:
-                                    </Typography>
+                                {/* 8. Notes (Full-width, Priority 8) */}
+                                <Box sx={{ mt: 2 }}>
                                     <Typography
+                                        fontWeight="bold"
                                         sx={{
-                                            whiteSpace: "pre-wrap",
-                                            fontSize: { xs: "0.75rem", sm: "0.875rem" },
+                                            fontSize: { xs: "0.875rem", sm: "1rem" },
+                                            mb: 1,
+                                            color: "primary.main"
                                         }}
                                     >
-                                        {customer.note || "-"}
+                                        Remarks / Notes:
                                     </Typography>
+
+                                    {customer.notes && customer.notes.length > 0 ? (
+                                        // Sort descending (latest first)
+                                        [...customer.notes]
+                                            .sort((a, b) => new Date(b.date) - new Date(a.date))
+                                            .map((entry, index) => (
+                                                <Box
+                                                    key={index}
+                                                    sx={{
+                                                        mb: 1.5,
+                                                        p: 1.5,
+                                                        border: "1px solid #e0e0e0",
+                                                        borderRadius: 2,
+                                                        bgcolor: "#fafafa",
+                                                    }}
+                                                >
+                                                    <Typography
+                                                        variant="body2"
+                                                        sx={{
+                                                            color: "text.secondary",
+                                                            fontSize: { xs: "0.75rem", sm: "0.875rem" },
+                                                            fontWeight: 600
+                                                        }}
+                                                    >
+                                                        {new Date(entry.date).toLocaleDateString("en-CA")} {/* YYYY-MM-DD */}
+                                                    </Typography>
+                                                    <Typography
+                                                        sx={{
+                                                            whiteSpace: "pre-wrap",
+                                                            mt: 0.5,
+                                                            fontSize: { xs: "0.75rem", sm: "0.875rem" },
+                                                        }}
+                                                    >
+                                                        {entry.note || "-"}
+                                                    </Typography>
+                                                </Box>
+                                            ))
+                                    ) : (
+                                        <Typography sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, color: "text.secondary" }}>
+                                            No notes available
+                                        </Typography>
+                                    )}
                                 </Box>
+
 
                                 {/* 8. Assigned To (Full-width, Priority 8) */}
                                

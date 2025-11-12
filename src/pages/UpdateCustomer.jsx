@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
     ThemeProvider,
     createTheme,
@@ -16,9 +16,14 @@ import {
     InputLabel,
     Select,
     MenuItem,
+    IconButton
 } from "@mui/material";
+import { Delete as DeleteIcon } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
-import { api } from "../components/utils/api"
+import { api } from "../components/utils/api";
+import useCurrentUser from "../hooks/useCurrentUser";
+import useAllUsers from "../hooks/useAllUsers";
+
 
 const theme = createTheme({
     palette: {
@@ -29,13 +34,21 @@ const theme = createTheme({
     components: {
         MuiButton: {
             styleOverrides: {
-                root: { textTransform: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 500 },
+                root: {
+                    textTransform: "none",
+                    borderRadius: 8,
+                    padding: "8px 16px",
+                    fontWeight: 500,
+                },
             },
         },
         MuiTextField: {
             styleOverrides: {
                 root: {
-                    "& .MuiOutlinedInput-root": { borderRadius: 8, backgroundColor: "#fff" },
+                    "& .MuiOutlinedInput-root": {
+                        borderRadius: 8,
+                        backgroundColor: "#fff",
+                    },
                 },
             },
         },
@@ -65,20 +78,27 @@ export default function UpdateCustomer() {
     const backendUrl = import.meta.env.VITE_BACKEND_URL;
     const navigate = useNavigate();
 
-    // Search input and loaded record
+    const { user: currentUser, loading: userLoading, error: userError } = useCurrentUser(backendUrl);
+    const { users, loading: loadingUsers } = useAllUsers(currentUser?.role === "admin");
+
+
     const [searchId, setSearchId] = useState("");
     const [record, setRecord] = useState(null);
 
-    // Form state
     const [formData, setFormData] = useState({
         fullname: "",
         mobile: "",
         email: "",
         address: "",
         reg_date: "",
-        note: "",
         status: "",
+        assigned_to: "",
     });
+
+    const [notes, setNotes] = useState([
+        { date: new Date().toISOString().split("T")[0], note: "" }
+    ]);
+
 
     const [loading, setLoading] = useState(false);
     const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
@@ -99,6 +119,28 @@ export default function UpdateCustomer() {
         setFormData((p) => ({ ...p, [name]: value }));
     };
 
+    const handleNoteChange = (index, field, value) => {
+        setNotes((prev) =>
+            prev.map((note, i) =>
+                i === index ? { ...note, [field]: value } : note
+            )
+        );
+    };
+
+    const addNote = () => {
+        setNotes((prev) => [
+            ...prev,
+            { date: new Date().toISOString().split("T")[0], note: "" },
+        ]);
+    };
+
+    const removeNote = (index) => {
+        if (notes.length > 1) {
+            setNotes((prev) => prev.filter((_, i) => i !== index));
+        }
+    };
+
+
     const handleSearch = async () => {
         const cid = (searchId || "").trim();
         if (!cid) {
@@ -116,9 +158,20 @@ export default function UpdateCustomer() {
                 email: cust.email || "",
                 address: cust.address || "",
                 reg_date: cust.reg_date || "",
-                note: cust.note || "",
                 status: cust.status || "",
+                assigned_to: cust.assigned_to || "",
             });
+
+            // Prefill notes if available
+            setNotes(
+                cust.notes && cust.notes.length > 0
+                    ? cust.notes.map((n) => ({
+                        date: n.date || new Date().toISOString().split("T")[0],
+                        note: n.note || "",
+                    }))
+                    : [{ date: new Date().toISOString().split("T")[0], note: "" }]
+            );
+
             showToast("Customer loaded", "success");
         } catch (e) {
             const msg = e?.response?.data?.detail || "Customer not found";
@@ -132,6 +185,7 @@ export default function UpdateCustomer() {
                 reg_date: "",
                 note: "",
                 status: "",
+                assigned_to: "",
             });
         } finally {
             setLoading(false);
@@ -151,18 +205,28 @@ export default function UpdateCustomer() {
 
         setLoading(true);
         try {
-            // Get current date in YYYY-MM-DD format for hold_since if status is HOLD
             const currentDate = new Date().toISOString().split("T")[0];
-            // Build patch payload: exclude protected fields
             const payload = {
                 fullname: formData.fullname.trim(),
                 mobile: formData.mobile || null,
+                reg_date: formData.reg_date,
                 email: formData.email.trim() || null,
                 address: formData.address.trim(),
-                note: formData.note.trim() || null,
+                notes: notes
+                    .filter((n) => n.note.trim() !== "")
+                    .map((n) => ({
+                        date: n.date,
+                        note: n.note.trim(),
+                    })),
                 status: formData.status || null,
                 hold_since: formData.status === "HOLD" ? currentDate : "",
             };
+
+
+            // ✅ Only admins can change assignment
+            if (currentUser?.role === "admin" && formData.assigned_to) {
+                payload.assigned_to = formData.assigned_to;
+            }
 
             const res = await api.patch(
                 `${backendUrl}/customer/${encodeURIComponent(record.customer_id)}`,
@@ -170,7 +234,7 @@ export default function UpdateCustomer() {
             );
 
             const updated = res.data;
-            showToast("Customer updated", "success");
+            showToast("Customer updated successfully", "success");
             navigate("/customers", { state: updated });
         } catch (e) {
             const msg = e?.response?.data?.detail || "Failed to update customer";
@@ -190,6 +254,7 @@ export default function UpdateCustomer() {
                 reg_date: "",
                 note: "",
                 status: "",
+                assigned_to: "",
             });
             return;
         }
@@ -201,8 +266,25 @@ export default function UpdateCustomer() {
             reg_date: record.reg_date || "",
             note: record.note || "",
             status: record.status || "",
+            assigned_to: record.assigned_to || "",
         });
     };
+
+    if (userLoading) {
+        return (
+            <Backdrop open={true} sx={{ color: "#fff", zIndex: 1300 }}>
+                <CircularProgress color="inherit" />
+            </Backdrop>
+        );
+    }
+
+    if (userError) {
+        return (
+            <Typography color="error" align="center" sx={{ mt: 5 }}>
+                Failed to load user. Please login again.
+            </Typography>
+        );
+    }
 
     return (
         <ThemeProvider theme={theme}>
@@ -231,7 +313,6 @@ export default function UpdateCustomer() {
                         boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
                     }}
                 >
-                    {/* Header */}
                     <Box sx={{ py: 3, px: { xs: 2, sm: 3, md: 4 }, bgcolor: "primary.main", color: "#fff" }}>
                         <Typography variant="h4" align="center" sx={{ fontSize: { xs: "1.5rem", sm: "2rem" } }}>
                             Update Customer
@@ -241,9 +322,18 @@ export default function UpdateCustomer() {
                         </Typography>
                     </Box>
 
-                    {/* Search bar */}
+                    {/* Search Bar */}
                     <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, bgcolor: "#ffffff", borderBottom: "1px solid #eee" }}>
-                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, width: "50%", justifyContent:'center', margin:'0 auto' }}>
+                        <Box
+                            sx={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 2,
+                                width: "50%",
+                                justifyContent: "center",
+                                margin: "0 auto",
+                            }}
+                        >
                             <TextField
                                 size="small"
                                 label="Customer ID"
@@ -270,7 +360,7 @@ export default function UpdateCustomer() {
                         </Box>
                     </Box>
 
-                    {/* Form (only shown if record exists) */}
+                    {/* Form */}
                     {record && (
                         <Box component="form" onSubmit={handleUpdate} sx={{ p: { xs: 2, sm: 3, md: 4 }, bgcolor: "#ffffff" }}>
                             <Box
@@ -279,10 +369,10 @@ export default function UpdateCustomer() {
                                     flexWrap: "wrap",
                                     gap: { xs: 2, sm: 2 },
                                     justifyContent: "space-between",
-                                    "& > :nth-of-type(1)": { flex: { xs: "1 1 100%", sm: "1 1 calc(50% - 8px)", md: "1 1 calc(25% - 12px)" } }, // Full Name
-                                    "& > :nth-of-type(2)": { flex: { xs: "1 1 100%", sm: "1 1 calc(50% - 8px)", md: "1 1 calc(25% - 12px)" } }, // Mobile
-                                    "& > :nth-of-type(3)": { flex: { xs: "1 1 100%", sm: "1 1 calc(50% - 8px)", md: "1 1 calc(30% - 12px)" } }, // Email
-                                    "& > :nth-of-type(4)": { flex: { xs: "1 1 100%", sm: "1 1 calc(50% - 8px)", md: "1 1 calc(20% - 12px)" } }, // Registration Date (locked)
+                                    "& > :nth-of-type(1)": { flex: { xs: "1 1 100%", sm: "1 1 calc(50% - 8px)", md: "1 1 calc(25% - 12px)" } },
+                                    "& > :nth-of-type(2)": { flex: { xs: "1 1 100%", sm: "1 1 calc(50% - 8px)", md: "1 1 calc(25% - 12px)" } },
+                                    "& > :nth-of-type(3)": { flex: { xs: "1 1 100%", sm: "1 1 calc(50% - 8px)", md: "1 1 calc(30% - 12px)" } },
+                                    "& > :nth-of-type(4)": { flex: { xs: "1 1 100%", sm: "1 1 calc(50% - 8px)", md: "1 1 calc(20% - 12px)" } },
                                     minWidth: 0,
                                 }}
                             >
@@ -294,72 +384,50 @@ export default function UpdateCustomer() {
                                     required
                                     fullWidth
                                     size="small"
+                                    disabled={currentUser?.role !== "admin"}
                                 />
-
                                 <TextField
                                     label="Mobile (10 digits)"
                                     name="mobile"
                                     value={formData.mobile}
                                     onChange={handleChange}
-                                    fullWidth
-                                    inputProps={{ inputMode: "numeric", maxLength: 10 }}
-                                    size="small"
+                                    fullWidth inputProps={{ inputMode: "numeric", maxLength: 10 }} size="small"
+                                    disabled={currentUser?.role !== "admin"}
                                 />
-
                                 <TextField
                                     type="email"
                                     label="Email"
                                     name="email"
                                     value={formData.email}
                                     onChange={handleChange}
-                                    fullWidth
-                                    size="small"
+                                    fullWidth size="small"
+                                    disabled={currentUser?.role !== "admin"}
                                 />
-
                                 <TextField
                                     type="date"
                                     label="Registration Date"
                                     name="reg_date"
                                     value={formData.reg_date}
-                                    onChange={() => { }}
-                                    fullWidth
-                                    InputLabelProps={{ shrink: true }}
+                                    onChange={handleChange}
+                                    fullWidth InputLabelProps={{ shrink: true }}
                                     size="small"
-                                    InputProps={{ readOnly: true }}
-                                    disabled
+                                    disabled={currentUser?.role !== "admin"}
                                 />
                             </Box>
 
-                            {/* Address */}
                             <Box sx={{ mt: 2 }}>
                                 <TextField
                                     label="Address"
                                     name="address"
                                     value={formData.address}
                                     onChange={handleChange}
-                                    required
-                                    fullWidth
-                                    multiline
-                                    minRows={2}
-                                    maxRows={6}
+                                    required fullWidth multiline minRows={2} maxRows={6}
+                                    disabled={currentUser?.role !== "admin"}
                                 />
                             </Box>
 
-                            {/* Note */}
-                            <Box sx={{ mt: 2 }}>
-                                <TextField
-                                    label="Remarks / Notes"
-                                    name="note"
-                                    value={formData.note}
-                                    onChange={handleChange}
-                                    fullWidth
-                                    multiline
-                                    minRows={4}
-                                    maxRows={8}
-                                />
-                            </Box>
 
-                            {/* Status */}
+
                             <Box sx={{ mt: 2 }}>
                                 <FormControl fullWidth size="small">
                                     <InputLabel>Status</InputLabel>
@@ -382,20 +450,94 @@ export default function UpdateCustomer() {
                                     </Select>
                                 </FormControl>
                             </Box>
-                            <Divider sx={{ my: 3 }} />
-                            <Box
-                                sx={{
-                                    display: "flex",
-                                    flexWrap: "wrap",
-                                    gap: 2,
-                                    justifyContent: "space-between",
-                                    alignItems: "center",
-                                }}
-                            >
-                                <Typography
-                                    variant="body2"
-                                    sx={{ color: "text.secondary", fontSize: { xs: "0.75rem", sm: "0.875rem" } }}
+
+                            {/* Assigned To — visible only to admin */}
+                            {currentUser?.role === "admin" && (
+                                <Box sx={{ mt: 2 }}>
+                                    <FormControl fullWidth size="small">
+                                        <InputLabel>Assigned To</InputLabel>
+                                        <Select name="assigned_to" value={formData.assigned_to} onChange={handleChange} label="Assigned To">
+                                            {users.map((user) => (
+                                                <MenuItem key={user.id} value={user.id}>
+                                                    {user.name} ({user.email}) - {user.role}
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                </Box>
+                            )}
+
+                            {/* Dynamic Notes Section */}
+                            <Box sx={{ mt: 3 }}>
+                                <Typography variant="h6" sx={{ mb: 2, color: "primary.main" }}>
+                                    Notes
+                                </Typography>
+
+                                {notes.map((noteItem, index) => (
+                                    <Box
+                                        key={index}
+                                        sx={{
+                                            display: "flex",
+                                            gap: 2,
+                                            alignItems: "flex-start",
+                                            mb: 2,
+                                            flexWrap: { xs: "wrap", sm: "nowrap" },
+                                        }}
+                                    >
+                                        <TextField
+                                            type="date"
+                                            label="Date"
+                                            value={noteItem.date}
+                                            onChange={(e) => handleNoteChange(index, "date", e.target.value)}
+                                            fullWidth
+                                            size="small"
+                                            InputLabelProps={{ shrink: true }}
+                                            sx={{
+                                                flex: { xs: "1 1 100%", sm: "0 0 150px" },
+                                                minWidth: { xs: "100%", sm: "150px" }
+                                            }}
+                                        />
+                                        <TextField
+                                            label="Note"
+                                            value={noteItem.note}
+                                            onChange={(e) => handleNoteChange(index, "note", e.target.value)}
+                                            fullWidth
+                                            multiline
+                                            minRows={1}
+                                            maxRows={3}
+                                            size="small"
+                                            sx={{ flex: 1 }}
+                                        />
+                                        <IconButton
+                                            onClick={() => removeNote(index)}
+                                            color="error"
+                                            size="small"
+                                            disabled={notes.length === 1}
+                                            sx={{
+                                                mt: { xs: 0, sm: 0.5 },
+                                                flex: { xs: "0 0 auto", sm: "0 0 auto" }
+                                            }}
+                                        >
+                                            <DeleteIcon />
+                                        </IconButton>
+                                    </Box>
+                                ))}
+
+                                <Button
+                                    type="button"
+                                    variant="outlined"
+                                    color="primary"
+                                    onClick={addNote}
+                                    sx={{ mt: 1 }}
                                 >
+                                    Add Note
+                                </Button>
+                            </Box>
+
+                            <Divider sx={{ my: 3 }} />
+
+                            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, justifyContent: "space-between", alignItems: "center" }}>
+                                <Typography variant="body2" sx={{ color: "text.secondary", fontSize: { xs: "0.75rem", sm: "0.875rem" } }}>
                                     Review details and click Update to save changes.
                                 </Typography>
 
@@ -413,12 +555,7 @@ export default function UpdateCustomer() {
                                     >
                                         Reset
                                     </Button>
-                                    <Button
-                                        type="submit"
-                                        variant="contained"
-                                        color="primary"
-                                        sx={{ "&:hover": { bgcolor: "primary.dark" }, fontSize: { xs: "0.75rem", sm: "0.875rem" } }}
-                                    >
+                                    <Button type="submit" variant="contained" color="primary" sx={{ "&:hover": { bgcolor: "primary.dark" }, fontSize: { xs: "0.75rem", sm: "0.875rem" } }}>
                                         Update
                                     </Button>
                                 </Box>
@@ -428,12 +565,7 @@ export default function UpdateCustomer() {
                 </Paper>
             </Box>
 
-            <Snackbar
-                open={toast.open}
-                autoHideDuration={4000}
-                onClose={handleToastClose}
-                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-            >
+            <Snackbar open={toast.open} autoHideDuration={4000} onClose={handleToastClose} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
                 <Alert onClose={handleToastClose} severity={toast.severity} variant="filled" sx={{ width: "100%" }}>
                     {toast.message}
                 </Alert>

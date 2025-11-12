@@ -92,7 +92,27 @@ export const CustomerPrint = (customer, preview = false) => {
                         ],
                         [
                             { text: "Remarks / Notes", style: "tableField" },
-                            { text: customer.note || "-", style: "tableValue" },
+                            {
+                                stack: (() => {
+                                    const notesArray = Array.isArray(customer.notes) ? customer.notes : [];
+
+                                    if (notesArray.length === 0) {
+                                        return [{ text: "-", style: "tableValue" }];
+                                    }
+
+                                    // Sort by date descending (latest first)
+                                    const sortedNotes = [...notesArray].sort(
+                                        (a, b) => new Date(b.date) - new Date(a.date)
+                                    );
+
+                                    // Map to formatted text blocks
+                                    return sortedNotes.map((n, idx) => ({
+                                        text: `${idx + 1}. [${n.date}] ${n.note}`,
+                                        style: "tableValue",
+                                        margin: [0, 2, 0, 2],
+                                    }));
+                                })(),
+                            },
                         ],
                     ],
                 },
