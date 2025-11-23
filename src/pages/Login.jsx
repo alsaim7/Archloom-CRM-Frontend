@@ -12,7 +12,10 @@ import {
     CircularProgress,
     ThemeProvider,
     createTheme,
+    InputAdornment,
+    IconButton,
 } from "@mui/material";
+import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { api } from "../components/utils/api";
 import { setToken } from "../components/utils/auth";
 import { LogoBase64 } from "../components/logo"; // Assuming same logo import as FilterPrint.js
@@ -58,6 +61,7 @@ const theme = createTheme({
 export default function Login() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
     const [toast, setToast] = useState({ open: false, message: "", severity: "info" });
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
@@ -69,6 +73,12 @@ export default function Login() {
     const handleToastClose = (_, reason) => {
         if (reason === "clickaway") return;
         setToast((p) => ({ ...p, open: false }));
+    };
+
+    const handleClickShowPassword = () => setShowPassword((show) => !show);
+
+    const handleMouseDownPassword = (event) => {
+        event.preventDefault();
     };
 
     const onSubmit = async (e) => {
@@ -162,13 +172,28 @@ export default function Login() {
                         />
                         <TextField
                             label="Password"
-                            type="password"
+                            type={showPassword ? "text" : "password"}
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             size="small"
                             fullWidth
                             required
                             InputLabelProps={{ style: { color: "#0f3d3e" } }}
+                            InputProps={{
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        <IconButton
+                                            aria-label="toggle password visibility"
+                                            onClick={handleClickShowPassword}
+                                            onMouseDown={handleMouseDownPassword}
+                                            edge="end"
+                                            sx={{ color: "primary.main" }}
+                                        >
+                                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                                        </IconButton>
+                                    </InputAdornment>
+                                ),
+                            }}
                         />
                         <Button
                             type="submit"
