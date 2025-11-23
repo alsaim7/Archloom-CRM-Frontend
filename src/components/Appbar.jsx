@@ -15,6 +15,7 @@ import {
     CssBaseline,
     ThemeProvider,
     createTheme,
+    useMediaQuery,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import HomeIcon from '@mui/icons-material/Home';
@@ -73,6 +74,9 @@ export default function Appbar() {
     const navigate = useNavigate();
     const location = useLocation();
 
+    // Check if we're in mobile view
+    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
     // Update authentication state when storage changes
     React.useEffect(() => {
         const handleStorageChange = () => {
@@ -95,22 +99,24 @@ export default function Appbar() {
 
     const navItems = isAuth
         ? [
-            ...(showNavButtons
+            ...(showNavButtons && !isMobile
                 ? [
                     { title: 'Back', path: null, action: () => navigate(-1), icon: <ArrowBackIcon sx={{ mr: 0.5 }} /> },
                     { title: 'Home', path: '/', icon: <HomeIcon sx={{ mr: 0.5 }} /> },
                 ]
                 : []),
-            { title: 'Logout', path: '/login', action: () => clearToken() },
+            // Only show Logout in desktop view, not in mobile
+            ...(isMobile ? [] : [{ title: 'Logout', path: '/login', action: () => clearToken() }]),
         ]
         : [
-            ...(showNavButtons
+            ...(showNavButtons && !isMobile
                 ? [
                     { title: 'Home', path: '/', icon: <HomeIcon sx={{ mr: 0.5 }} /> },
                     { title: 'Back', path: null, action: () => navigate(-1), icon: <ArrowBackIcon sx={{ mr: 0.5 }} /> },
                 ]
                 : []),
-            { title: 'Login', path: '/login' },
+            // Only show Login in desktop view, not in mobile
+            ...(isMobile ? [] : [{ title: 'Login', path: '/login' }]),
         ];
 
     const drawerItems = isAuth
@@ -259,8 +265,8 @@ export default function Appbar() {
                             Archloom
                         </Typography>
                     </Box>
-                    {/* Desktop Menu */}
-                    <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 } }}>
+                    {/* Desktop Menu - Only show on larger screens */}
+                    <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: { xs: 1, sm: 2 } }}>
                         {navItems.map((item) => (
                             <Button
                                 key={item.title}
